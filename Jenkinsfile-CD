@@ -1,0 +1,153 @@
+// ============================================================
+// CD PIPELINE — Pull Docker image and deploy to AWS EC2
+// ============================================================
+
+pipeline {
+
+    agent any
+
+    environment {
+        DOCKERHUB_USERNAME  = "surendra1docker"   // same as CI
+        IMAGE_NAME          = "my-project1-webapp"              // same as CI
+        DOCKERHUB_IMAGE     = "${DOCKERHUB_USERNAME}/${IMAGE_NAME}"
+
+        EC2_HOST            = "3.108.191.132"         // e.g. "13.232.45.67"
+        EC2_USER            = "ubuntu"                     // or "ec2-user"
+        APP_PORT            = "80"                         // port to expose on EC2
+        CONTAINER_PORT      = "3000"                       // port your app runs on inside Docker
+        CONTAINER_NAME      = "my-project1-container"            // name for the running container
+    }
+
+    stages {
+
+        // ── STAGE 1 ─────────────────────────────────────────
+        // Verify: Confirm the image exists on Docker Hub
+        // ── WHY: Before deploying, we confirm the image
+        //         is actually there. If the CI pipeline failed,
+        //         we shouldn't deploy a broken/missing image.
+        stage('Verify Image on Docker Hub') {
+            steps {
+                sh """
+                    echo "Checking if image exists: ${DOCKERHUB_IMAGE}:latest"
+                    docker manifest inspect ${DOCKERHUB_IMAGE}:latest
+                """
+                echo "✅ Image confirmed on Docker Hub"
+            }
+        }
+
+        // ── STAGE 2 ─────────────────────────────────────────
+        // Connect: SSH into EC2 and pull the latest image
+        // ── WHY: Your EC2 instance needs to download the new
+        //         image BEFORE we stop the old container.
+        //         This way, there's minimal downtime — the old
+        //         container is still running while new image
+        //         downloads in the background.
+        stage('Pull Image on EC2') {
+            steps {
+                sshagent(credentials: ['ec2-ssh-credentials']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
+                          'docker pull ${DOCKERHUB_IMAGE}:latest'
+                    """
+                    // -o StrictHostKeyChecking=no skips the
+                    // "Are you sure you want to connect?" prompt
+                }
+                echo "✅ Latest image pulled on EC2"
+            }
+        }
+
+        // ── STAGE 3 ─────────────────────────────────────────
+        // Stop: Remove the currently running old container
+        // ── WHY: You can't start a new container on the same
+        //         port if an old one is already using it.
+        //         "|| true" means: don't fail if no container
+        //         is running (e.g. first-time deploy).
+        stage('Stop Old Container') {
+            steps {
+                sshagent(credentials: ['ec2-ssh-credentials']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
+                          'docker stop ${CONTAINER_NAME} || true && \
+                           docker rm   ${CONTAINER_NAME} || true'
+                    """
+                }
+                echo "🛑 Old container stopped and removed"
+            }
+        }
+
+        // ── STAGE 4 ─────────────────────────────────────────
+        // Deploy: Start a new container with the fresh image
+        // ── WHY: This is the actual deployment! We run the
+        //         new image as a container.
+        //  Flags explained:
+        //   -d         → run in background (detached mode)
+        //   --name     → give container a recognizable name
+        //   -p 80:3000 → map EC2 port 80 → container port 3000
+        //   --restart  → auto-restart if container crashes or
+        //                EC2 reboots
+        stage('Deploy New Container') {
+            steps {
+                sshagent(credentials: ['ec2-ssh-credentials']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
+                          'docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            -p ${APP_PORT}:${CONTAINER_PORT} \
+                            --restart unless-stopped \
+                            ${DOCKERHUB_IMAGE}:latest'
+                    """
+                }
+                echo "🚀 New container deployed!"
+            }
+        }
+
+        // ── STAGE 5 ─────────────────────────────────────────
+        // Verify: Confirm the container is actually running
+        // ── WHY: Sometimes a container starts but immediately
+        //         crashes due to a misconfiguration. This step
+        //         catches that and fails the pipeline so you
+        //         know the deployment didn't succeed silently.
+        stage('Verify Deployment') {
+            steps {
+                sshagent(credentials: ['ec2-ssh-credentials']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
+                          'docker ps --filter name=${CONTAINER_NAME} --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+                    """
+                }
+                echo "✅ Deployment verified — app is running"
+            }
+        }
+
+        // ── STAGE 6 ─────────────────────────────────────────
+        // Cleanup: Remove old/dangling images from EC2
+        // ── WHY: Each deployment pulls a new :latest image.
+        //         Old images pile up over time and eat disk
+        //         space. This removes untagged (dangling) images.
+        stage('Cleanup Old Images on EC2') {
+            steps {
+                sshagent(credentials: ['ec2-ssh-credentials']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
+                          'docker image prune -f'
+                    """
+                }
+                echo "🧹 Old images cleaned from EC2"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo """
+            🎉 CD Pipeline SUCCESS!
+            App is live at: http://${EC2_HOST}:${APP_PORT}
+            Container: ${CONTAINER_NAME}
+            Image: ${DOCKERHUB_IMAGE}:latest
+            """
+        }
+        failure {
+            echo "❌ CD Pipeline FAILED — The old container may still be running. Check logs."
+        }
+    }
+}

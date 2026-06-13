@@ -1,0 +1,124 @@
+// ============================================================
+// CI PIPELINE — Build Docker image and push to Docker Hub
+// ============================================================
+
+pipeline {
+
+    // "agent any" means: run this pipeline on any available
+    // Jenkins worker/node. For beginners, this is usually
+    // the Jenkins server itself.
+    agent any
+
+    // Environment variables — defined once, used everywhere.
+    // Change these three lines to match YOUR project.
+    environment {
+        DOCKERHUB_USERNAME  = "surendra1docker"   // e.g. "john123"
+        IMAGE_NAME          = "my-project1-webapp"              // e.g. "mywebapp"
+        DOCKERHUB_IMAGE     = "${DOCKERHUB_USERNAME}/${IMAGE_NAME}"
+    }
+
+    stages {
+
+        // ── STAGE 1 ─────────────────────────────────────────
+        // Checkout: Pull source code from GitHub
+        // ── WHY: Jenkins needs the code locally to build
+        //         the Docker image from the Dockerfile.
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/SurendraImmanni/Project_1.git'
+                // No credentials needed — public repo!
+                echo "✅ Code checked out from GitHub"
+            }
+        }
+
+        // ── STAGE 2 ─────────────────────────────────────────
+        // Build: Create the Docker image
+        // ── WHY: This reads your Dockerfile and packages your
+        //         app + all dependencies into a single image.
+        //         The tag uses BUILD_NUMBER so every build
+        //         gets a unique version (e.g. myapp:42).
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "🔨 Building Docker image: ${DOCKERHUB_IMAGE}:${BUILD_NUMBER}"
+                    sh """
+                        docker build \
+                          -t ${DOCKERHUB_IMAGE}:${BUILD_NUMBER} \
+                          -t ${DOCKERHUB_IMAGE}:latest \
+                          .
+                    """
+                    // We tag as both :42 (specific) and :latest
+                    // :latest makes it easy for the CD pipeline to
+                    // always pull the newest image.
+                }
+            }
+        }
+
+        // ── STAGE 3 ─────────────────────────────────────────
+        // Login: Authenticate with Docker Hub
+        // ── WHY: Docker Hub requires login before you can
+        //         push images. We use Jenkins credentials
+        //         (never hardcode passwords in Jenkinsfiles!).
+        //         withCredentials injects the username and
+        //         password as environment variables.
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+                    echo "✅ Logged in to Docker Hub"
+                }
+            }
+        }
+
+        // ── STAGE 4 ─────────────────────────────────────────
+        // Push: Upload the image to Docker Hub
+        // ── WHY: Storing the image in Docker Hub makes it
+        //         accessible from anywhere — your EC2 instance
+        //         will pull it from here during deployment.
+        stage('Push Image to Docker Hub') {
+            steps {
+                sh """
+                    docker push ${DOCKERHUB_IMAGE}:${BUILD_NUMBER}
+                    docker push ${DOCKERHUB_IMAGE}:latest
+                """
+                echo "✅ Image pushed: ${DOCKERHUB_IMAGE}:latest"
+            }
+        }
+
+        // ── STAGE 5 ─────────────────────────────────────────
+        // Cleanup: Remove local Docker images
+        // ── WHY: Docker images can be large (100MB–1GB+).
+        //         If you don't clean up, your Jenkins server
+        //         disk will fill up after many builds.
+        stage('Cleanup Local Images') {
+            steps {
+                sh """
+                    docker rmi ${DOCKERHUB_IMAGE}:${BUILD_NUMBER} || true
+                    docker rmi ${DOCKERHUB_IMAGE}:latest || true
+                """
+                // "|| true" prevents the pipeline from failing
+                // if the image doesn't exist for some reason.
+                echo "🧹 Local images cleaned up"
+            }
+        }
+    }
+
+    // Post section: Runs AFTER all stages complete
+    post {
+        success {
+            echo "🎉 CI Pipeline SUCCESS — Image ${DOCKERHUB_IMAGE}:${BUILD_NUMBER} is on Docker Hub!"
+        }
+        failure {
+            echo "❌ CI Pipeline FAILED — Check the logs above for errors"
+        }
+        always {
+            // Always log out of Docker Hub for security
+            sh 'docker logout || true'
+        }
+    }
+}

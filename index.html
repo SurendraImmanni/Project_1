@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevFlow — CI/CD Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0a0c10;
+      --surface: #111318;
+      --card:    #161a22;
+      --border:  #1e2330;
+      --accent:  #00e5a0;
+      --accent2: #0088ff;
+      --warn:    #ff9500;
+      --danger:  #ff3b5c;
+      --text:    #e8eaf0;
+      --muted:   #5a6070;
+      --font-display: 'Syne', sans-serif;
+      --font-mono:    'JetBrains Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-display);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Background grid ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Top glow ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 700px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(0,229,160,0.08) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout ── */
+    .wrapper { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── Nav ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      animation: fadeDown 0.5s ease both;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+
+    .nav-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent);
+      background: rgba(0,229,160,0.08);
+      border: 1px solid rgba(0,229,160,0.2);
+      padding: 5px 12px;
+      border-radius: 20px;
+    }
+    .nav-badge::before {
+      content: '';
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 64px 0 48px;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+
+    .hero-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 {
+      font-size: clamp(36px, 5vw, 58px);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -1.5px;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero p {
+      font-size: 16px;
+      color: var(--muted);
+      max-width: 500px;
+      line-height: 1.7;
+      font-weight: 400;
+    }
+
+    /* ── Stats row ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 32px;
+      animation: fadeUp 0.6s 0.2s ease both;
+    }
+
+    .stat {
+      background: var(--card);
+      padding: 20px 24px;
+      transition: background 0.2s;
+    }
+    .stat:hover { background: var(--surface); }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    .green  { color: var(--accent); }
+    .blue   { color: var(--accent2); }
+    .orange { color: var(--warn); }
+    .red    { color: var(--danger); }
+
+    /* ── Section headers ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .section-action {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent2);
+      cursor: pointer;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .section-action:hover { opacity: 1; }
+
+    /* ── Pipeline grid ── */
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 32px;
+      animation: fadeUp 0.6s 0.3s ease both;
+    }
+
+    .pipeline-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: border-color 0.2s, transform 0.2s;
+      cursor: pointer;
+    }
+    .pipeline-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .pipeline-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .pipeline-name {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .pipeline-branch {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .status-pill {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 20px;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+    .pill-success { background: rgba(0,229,160,0.12); color: var(--accent); border: 1px solid rgba(0,229,160,0.25); }
+    .pill-running { background: rgba(0,136,255,0.12); color: var(--accent2); border: 1px solid rgba(0,136,255,0.25); animation: blink 1.5s infinite; }
+    .pill-failed  { background: rgba(255,59,92,0.12);  color: var(--danger); border: 1px solid rgba(255,59,92,0.25); }
+    .pill-pending { background: rgba(255,149,0,0.12);  color: var(--warn);   border: 1px solid rgba(255,149,0,0.25); }
+
+    /* ── Stage progress bar ── */
+    .stages {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .stage-step {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .stage-step.done    { background: var(--accent); }
+    .stage-step.active  { background: var(--accent2); }
+    .stage-step.active::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.4);
+      animation: shimmer 1.2s infinite;
+    }
+    .stage-step.fail    { background: var(--danger); }
+
+    .pipeline-meta {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Recent builds table ── */
+    .builds-section {
+      animation: fadeUp 0.6s 0.4s ease both;
+      margin-bottom: 32px;
+    }
+
+    .builds-table {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .builds-row {
+      display: grid;
+      grid-template-columns: 48px 1fr 120px 100px 90px 100px;
+      align-items: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      transition: background 0.15s;
+      gap: 12px;
+    }
+    .builds-row:last-child { border-bottom: none; }
+    .builds-row:hover { background: var(--surface); }
+
+    .builds-row.header {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: var(--surface);
+    }
+    .builds-row.header:hover { background: var(--surface); }
+
+    .build-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .build-name {
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .build-commit {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .build-duration {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Log terminal ── */
+    .terminal-section {
+      animation: fadeUp 0.6s 0.5s ease both;
+      margin-bottom: 48px;
+    }
+
+    .terminal {
+      background: #080a0e;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #febc2e; }
+    .dot-g { background: #28c840; }
+
+    .terminal-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: 8px;
+    }
+
+    .terminal-body {
+      padding: 20px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.8;
+      max-height: 280px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .log-line { display: block; }
+    .log-step    { color: var(--accent2); }
+    .log-ok      { color: var(--accent); }
+    .log-warn    { color: var(--warn); }
+    .log-err     { color: var(--danger); }
+    .log-muted   { color: #3a4050; }
+    .log-plain   { color: #6a7585; }
+
+    .log-cursor {
+      display: inline-block;
+      width: 8px; height: 13px;
+      background: var(--accent);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink-cursor 1s step-end infinite;
+    }
+
+    /* ── Deploy button ── */
+    .deploy-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 48px;
+      animation: fadeUp 0.6s 0.55s ease both;
+    }
+
+    .deploy-info { flex: 1; }
+    .deploy-info h3 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .deploy-info p  { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+    .btn-primary:hover { background: #00ffb3; transform: scale(1.02); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--muted); background: var(--surface); }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeUp   { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    @keyframes shimmer  { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+    @keyframes blink-cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes spin     { to { transform: rotate(360deg); } }
+
+    @media (max-width: 768px) {
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .pipeline-grid { grid-template-columns: 1fr; }
+      .builds-row { grid-template-columns: 40px 1fr 80px 70px; }
+      .builds-row .build-duration, .builds-row .th-dur { display: none; }
+      .builds-row .build-branch, .builds-row .th-branch { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- Nav -->
+  <nav>
+    <div class="logo">Dev<span>Flow</span></div>
+    <div class="nav-badge">All systems operational</div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-label">// CI/CD Dashboard</div>
+    <h1>Pipeline <em>visibility</em><br>at a glance.</h1>
+    <p>Monitor builds, deployments, and pipeline health across all your environments in real time.</p>
+  </section>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-value green" id="stat-success">98<span style="font-size:16px">%</span></div>
+      <div class="stat-label">Success rate</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value blue" id="stat-builds">1,247</div>
+      <div class="stat-label">Total builds</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="stat-avg">3m 42s</div>
+      <div class="stat-label">Avg build time</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value orange" id="stat-deploy">24</div>
+      <div class="stat-label">Deployments today</div>
+    </div>
+  </div>
+
+  <!-- Active pipelines -->
+  <div class="section-header">
+    <div class="section-title">Active Pipelines</div>
+    <div class="section-action" onclick="refreshPipelines()">↻ Refresh</div>
+  </div>
+
+  <div class="pipeline-grid" id="pipeline-grid">
+
+    <div class="pipeline-card">
+      <div class="pipeline-top">
+        <div>
+          <div class="pipeline-name">backend-api</div>
+          <div class="pipeline-branch">⎇ main · #248</div>
+        </div>
+        <div class="status-pill pill-running">● RUNNING</div>
+      </div>
+      <div class="stages">
+        <div class="stage-step done"></div>
+        <div class="stage-step done"></div>
+        <div class="stage-step active"></div>
+        <div class="stage-step"></div>
+      </div>
+      <div class="pipeline-meta">
+        <span>SonarQube scan…</span>
+        <span>1m 18s</span>
+      </div>
+    </div>
+
+    <div class="pipeline-card">
+      <div class="pipeline-top">
+        <div>
+          <div class="pipeline-name">frontend-app</div>
+          <div class="pipeline-branch">⎇ main · #131</div>
+        </div>
+        <div class="status-pill pill-success">✓ SUCCESS</div>
+      </div>
+      <div class="stages">
+        <div class="stage-step done"></div>
+        <div class="stage-step done"></div>
+        <div class="stage-step done"></div>
+        <div class="stage-step done"></div>
+      </div>
+      <div class="pipeline-meta">
+        <span>Deployed to EC2</span>
+        <span>3m 02s</span>
+      </div>
+    </div>
+
+    <div class="pipeline-card">
+      <div class="pipeline-top">
+        <div>
+          <div class="pipeline-name">auth-service</div>
+          <div class="pipeline-branch">⎇ feature/oauth · #76</div>
+        </div>
+        <div class="status-pill pill-failed">✕ FAILED</div>
+      </div>
+      <div class="stages">
+        <div class="stage-step done"></div>
+        <div class="stage-step fail"></div>
+        <div class="stage-step"></div>
+        <div class="stage-step"></div>
+      </div>
+      <div class="pipeline-meta">
+        <span>Quality gate failed</span>
+        <span>0m 49s</span>
+      </div>
+    </div>
+
+    <div class="pipeline-card">
+      <div class="pipeline-top">
+        <div>
+          <div class="pipeline-name">data-pipeline</div>
+          <div class="pipeline-branch">⎇ main · #55</div>
+        </div>
+        <div class="status-pill pill-pending">◷ PENDING</div>
+      </div>
+      <div class="stages">
+        <div class="stage-step"></div>
+        <div class="stage-step"></div>
+        <div class="stage-step"></div>
+        <div class="stage-step"></div>
+      </div>
+      <div class="pipeline-meta">
+        <span>Waiting in queue</span>
+        <span>—</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Recent Builds -->
+  <div class="builds-section">
+    <div class="section-header">
+      <div class="section-title">Recent Builds</div>
+      <div class="section-action">View all →</div>
+    </div>
+
+    <div class="builds-table">
+      <div class="builds-row header">
+        <span>#</span>
+        <span>Pipeline</span>
+        <span class="th-branch">Branch</span>
+        <span>Status</span>
+        <span class="th-dur">Duration</span>
+        <span>Time</span>
+      </div>
+
+      <div class="builds-row">
+        <span class="build-num">#248</span>
+        <div><div class="build-name">backend-api</div><div class="build-commit">a3f9c12 fix: auth token expiry</div></div>
+        <span class="build-branch" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">main</span>
+        <span class="status-pill pill-running">RUNNING</span>
+        <span class="build-duration">1m 18s</span>
+        <span class="build-duration">Just now</span>
+      </div>
+
+      <div class="builds-row">
+        <span class="build-num">#131</span>
+        <div><div class="build-name">frontend-app</div><div class="build-commit">9be2d4a feat: dark mode</div></div>
+        <span class="build-branch" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">main</span>
+        <span class="status-pill pill-success">SUCCESS</span>
+        <span class="build-duration">3m 02s</span>
+        <span class="build-duration">4m ago</span>
+      </div>
+
+      <div class="builds-row">
+        <span class="build-num">#76</span>
+        <div><div class="build-name">auth-service</div><div class="build-commit">c77aa31 refactor: oauth flow</div></div>
+        <span class="build-branch" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">feature/oauth</span>
+        <span class="status-pill pill-failed">FAILED</span>
+        <span class="build-duration">0m 49s</span>
+        <span class="build-duration">12m ago</span>
+      </div>
+
+      <div class="builds-row">
+        <span class="build-num">#247</span>
+        <div><div class="build-name">backend-api</div><div class="build-commit">f1e8b90 chore: update deps</div></div>
+        <span class="build-branch" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">main</span>
+        <span class="status-pill pill-success">SUCCESS</span>
+        <span class="build-duration">4m 11s</span>
+        <span class="build-duration">1h ago</span>
+      </div>
+
+      <div class="builds-row">
+        <span class="build-num">#130</span>
+        <div><div class="build-name">frontend-app</div><div class="build-commit">2d4c891 fix: mobile layout</div></div>
+        <span class="build-branch" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">main</span>
+        <span class="status-pill pill-success">SUCCESS</span>
+        <span class="build-duration">2m 55s</span>
+        <span class="build-duration">2h ago</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal log -->
+  <div class="terminal-section">
+    <div class="section-header">
+      <div class="section-title">Live Build Log — backend-api #248</div>
+      <div class="section-action" onclick="clearLog()">Clear</div>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+        <div class="terminal-title">jenkins-agent-01 — backend-api #248</div>
+      </div>
+      <div class="terminal-body" id="log-body">
+        <span class="log-line log-muted">[09:14:02] Started by user admin</span>
+        <span class="log-line log-plain">[09:14:02] Running in Durability level: MAX_SURVIVABILITY</span>
+        <span class="log-line log-step">[09:14:03] [Stage: Checkout]</span>
+        <span class="log-line log-plain">[09:14:03] Cloning repository https://github.com/org/backend-api.git</span>
+        <span class="log-line log-ok">[09:14:05] ✓ Code checkout complete (branch: main)</span>
+        <span class="log-line log-step">[09:14:05] [Stage: SonarQube Analysis]</span>
+        <span class="log-line log-plain">[09:14:06] INFO: Scanner configuration file: /opt/sonar-scanner/conf/sonar-scanner.properties</span>
+        <span class="log-line log-plain">[09:14:07] INFO: Project root configuration file: /workspace/backend-api/sonar-project.properties</span>
+        <span class="log-line log-plain">[09:14:08] INFO: Analyzing on SonarQube server http://sonar.internal:9000</span>
+        <span class="log-line log-warn">[09:14:18] WARN: 2 code smell(s) found in src/utils/parser.js</span>
+        <span class="log-line log-plain">[09:14:21] INFO: Analysis report generated in 340ms</span>
+        <span class="log-line log-plain">[09:14:22] INFO: Analysis report compressed (38kb)</span>
+        <span class="log-line log-plain">[09:14:23] INFO: Analysis report uploaded in 120ms</span>
+        <span class="log-line log-plain">[09:15:00] Waiting for quality gate result…<span class="log-cursor"></span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deploy bar -->
+  <div class="deploy-bar">
+    <div class="deploy-info">
+      <h3>Deploy to Production — AWS EC2</h3>
+      <p>Last deployed: frontend-app:latest · 4 minutes ago · us-east-1</p>
+    </div>
+    <button class="btn btn-ghost" onclick="simulateBuild()">▶ Trigger Build</button>
+    <button class="btn btn-primary" onclick="simulateDeploy()">🚀 Deploy Now</button>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <span>DevFlow v2.4.1 · Running on Nginx + Docker · AWS EC2</span>
+    <span id="clock"></span>
+  </footer>
+
+</div>
+
+<script>
+  // Live clock
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+      now.toUTCString().replace('GMT','UTC');
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // Animated counters
+  function animateCount(el, target, suffix = '') {
+    let start = 0;
+    const step = target / 40;
+    const timer = setInterval(() => {
+      start = Math.min(start + step, target);
+      el.textContent = Math.round(start).toLocaleString() + suffix;
+      if (start >= target) clearInterval(timer);
+    }, 30);
+  }
+
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      animateCount(document.querySelector('#stat-builds'), 1247);
+      animateCount(document.querySelector('#stat-deploy'), 24);
+    }, 400);
+  });
+
+  // Refresh button
+  function refreshPipelines() {
+    const cards = document.querySelectorAll('.pipeline-card');
+    cards.forEach((c, i) => {
+      c.style.opacity = '0.4';
+      c.style.transition = 'opacity 0.2s';
+      setTimeout(() => { c.style.opacity = '1'; }, 300 + i * 100);
+    });
+  }
+
+  // Deploy simulation
+  function simulateDeploy() {
+    const btn = event.target;
+    btn.textContent = '⏳ Deploying…';
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    setTimeout(() => {
+      btn.textContent = '✅ Deployed!';
+      btn.style.background = '#00e5a0';
+      setTimeout(() => {
+        btn.textContent = '🚀 Deploy Now';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      }, 3000);
+    }, 2500);
+  }
+
+  function simulateBuild() {
+    const btn = event.target;
+    btn.textContent = '⏳ Queuing…';
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = '▶ Trigger Build';
+      btn.disabled = false;
+    }, 2000);
+  }
+
+  function clearLog() {
+    const body = document.getElementById('log-body');
+    body.innerHTML = '<span class="log-line log-muted">[log cleared]<span class="log-cursor"></span></span>';
+  }
+</script>
+</body>
+</html>
