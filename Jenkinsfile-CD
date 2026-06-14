@@ -14,7 +14,7 @@ pipeline {
         EC2_HOST            = "3.108.191.132"         // e.g. "13.232.45.67"
         EC2_USER            = "ubuntu"                     // or "ec2-user"
         APP_PORT            = "8080"                         // port to expose on EC2
-        CONTAINER_PORT      = "3000"                       // port your app runs on inside Docker
+        CONTAINER_PORT      = "80"                       // port your app runs on inside Docker
         CONTAINER_NAME      = "my-project1-container"            // name for the running container
     }
 
