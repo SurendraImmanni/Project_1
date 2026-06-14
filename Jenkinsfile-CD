@@ -97,7 +97,7 @@ pipeline {
                             ${DOCKERHUB_IMAGE}:latest'
                     """
                 }
-                echo "🚀 New container deployed!"
+                echo "🚀 Congratulations..New container deployed!"
             }
         }
 
