@@ -24,7 +24,7 @@ jobs:
   # ==========================================================
   build-and-push:
 
-    # GitHub-hosted Ubuntu runner
+    # GitHub-hosted Ubuntu runner agent
     runs-on: ubuntu-latest
 
     steps:
