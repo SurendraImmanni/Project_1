@@ -39,7 +39,7 @@ jobs:
       # ───────────────────────────────────────────────────────
       # STEP 2 — Generate Build Number
       # GitHub Actions doesn't have BUILD_NUMBER like Jenkins.
-      # We'll use GitHub run number instead.
+      # We'll use GitHub run number instead of this.
       # ───────────────────────────────────────────────────────
       - name: Set Build Number
         run: echo "BUILD_NUMBER=${{ github.run_number }}" >> $GITHUB_ENV
