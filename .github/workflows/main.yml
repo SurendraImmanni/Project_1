@@ -1,0 +1,114 @@
+name: CI Pipeline - Build and Push Docker Image
+
+# ============================================================
+# Trigger:
+# Run pipeline automatically when code is pushed to main
+# ============================================================
+on:
+  push:
+    branches:
+      - main
+
+# ============================================================
+# Global Environment Variables
+# ============================================================
+env:
+  DOCKERHUB_USERNAME: surendra1docker
+  IMAGE_NAME: my-project1-webapp
+  DOCKERHUB_IMAGE: surendra1docker/my-project1-webapp
+
+jobs:
+
+  # ==========================================================
+  # JOB: Build and Push Docker Image
+  # ==========================================================
+  build-and-push:
+
+    # GitHub-hosted Ubuntu runner
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ───────────────────────────────────────────────────────
+      # STEP 1 — Checkout Code
+      # Pull source code from GitHub repository
+      # ───────────────────────────────────────────────────────
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ───────────────────────────────────────────────────────
+      # STEP 2 — Generate Build Number
+      # GitHub Actions doesn't have BUILD_NUMBER like Jenkins.
+      # We'll use GitHub run number instead.
+      # ───────────────────────────────────────────────────────
+      - name: Set Build Number
+        run: echo "BUILD_NUMBER=${{ github.run_number }}" >> $GITHUB_ENV
+
+      # ───────────────────────────────────────────────────────
+      # STEP 3 — Login to Docker Hub
+      # Uses GitHub Secrets for security
+      # ───────────────────────────────────────────────────────
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ───────────────────────────────────────────────────────
+      # STEP 4 — Build Docker Image
+      # Creates two tags:
+      #   1. Specific build version
+      #   2. latest
+      # ───────────────────────────────────────────────────────
+      - name: Build Docker Image
+        run: |
+          echo "🔨 Building Docker image..."
+
+          docker build \
+            -t $DOCKERHUB_IMAGE:$BUILD_NUMBER \
+            -t $DOCKERHUB_IMAGE:latest \
+            .
+
+      # ───────────────────────────────────────────────────────
+      # STEP 5 — Push Docker Image
+      # Upload image to Docker Hub
+      # ───────────────────────────────────────────────────────
+      - name: Push Docker Image
+        run: |
+          echo "📤 Pushing Docker image..."
+
+          docker push $DOCKERHUB_IMAGE:$BUILD_NUMBER
+          docker push $DOCKERHUB_IMAGE:latest
+
+      # ───────────────────────────────────────────────────────
+      # STEP 6 — Cleanup Local Images
+      # Free disk space on GitHub runner
+      # ───────────────────────────────────────────────────────
+      - name: Cleanup Local Images
+        run: |
+          docker rmi $DOCKERHUB_IMAGE:$BUILD_NUMBER || true
+          docker rmi $DOCKERHUB_IMAGE:latest || true
+
+      # ───────────────────────────────────────────────────────
+      # STEP 7 — Logout from Docker Hub
+      # ───────────────────────────────────────────────────────
+      - name: Logout from Docker Hub
+        run: docker logout
+
+      # ───────────────────────────────────────────────────────
+      # SUCCESS MESSAGE
+      # ───────────────────────────────────────────────────────
+      - name: Success Message
+        if: success()
+        run: |
+          echo "🎉 CI Pipeline SUCCESS"
+          echo "Image pushed:"
+          echo "$DOCKERHUB_IMAGE:$BUILD_NUMBER"
+
+      # ───────────────────────────────────────────────────────
+      # FAILURE MESSAGE
+      # ───────────────────────────────────────────────────────
+      - name: Failure Message
+        if: failure()
+        run: |
+          echo "❌ CI Pipeline FAILED"
